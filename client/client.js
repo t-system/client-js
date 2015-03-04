@@ -232,7 +232,7 @@ function FhirClient(p) {
       // p.resource, p.id, ?p.version, p.include
 
       var ret = new $.Deferred();
-      var url = server.serviceUrl + '/' + p.resource + '/' + p.id;
+      var url = server.serviceUrl + '/' + p.resource + '/' + p.id + '?_format=json';
 
       $.ajax(client.authenticated({
         type: 'GET',
@@ -255,7 +255,7 @@ function FhirClient(p) {
     client.getBinary = function(p) {
 
       var ret = new $.Deferred();
-      var url = server.serviceUrl + '/' + p.resource + '/' + p.id;
+      var url = server.serviceUrl + '/' + p.resource + '/' + p.id + '?_format=json';
 
       $.ajax(client.authenticated({
         type: 'GET',

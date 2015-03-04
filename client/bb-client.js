@@ -207,7 +207,7 @@ function providers(fhirServiceUrl, callback, errback){
 
 
   jQuery.get(
-    fhirServiceUrl+"/metadata",
+    fhirServiceUrl+"/metadata?_format=json",
     function(r){
       var res = {
         "name": "SMART on FHIR Testing Server",
@@ -344,7 +344,7 @@ BBClient.authorize = function(params, errback){
 BBClient.resolveAuthType = function (fhirServiceUrl, callback, errback) {
 
       jQuery.get(
-        fhirServiceUrl+"/metadata",
+        fhirServiceUrl+"/metadata?_format=json",
         function(r){
           var type = "none";
           

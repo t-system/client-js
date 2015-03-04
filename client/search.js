@@ -65,11 +65,13 @@ function Search(p) {
 
   search.execute = function() {
 
+    var queryParams = search.spec.queryParams();
+    queryParams["_format"] = "json";
 
     var searchParams = {
       type: 'GET',
       url: search.client.urlFor(search.spec),
-      data: search.spec.queryParams(),
+      data: queryParams,
       dataType: "json",
       traditional: true
     };

@@ -209,7 +209,7 @@ function providers(fhirServiceUrl, callback, errback){
 
 
   jQuery.get(
-    fhirServiceUrl+"/metadata",
+    fhirServiceUrl+"/metadata?_format=json",
     function(r){
       var res = {
         "name": "SMART on FHIR Testing Server",
@@ -346,7 +346,7 @@ BBClient.authorize = function(params, errback){
 BBClient.resolveAuthType = function (fhirServiceUrl, callback, errback) {
 
       jQuery.get(
-        fhirServiceUrl+"/metadata",
+        fhirServiceUrl+"/metadata?_format=json",
         function(r){
           var type = "none";
           
@@ -629,7 +629,7 @@ function FhirClient(p) {
       // p.resource, p.id, ?p.version, p.include
 
       var ret = new $.Deferred();
-      var url = server.serviceUrl + '/' + p.resource + '/' + p.id;
+      var url = server.serviceUrl + '/' + p.resource + '/' + p.id + '?_format=json';
 
       $.ajax(client.authenticated({
         type: 'GET',
@@ -652,7 +652,7 @@ function FhirClient(p) {
     client.getBinary = function(p) {
 
       var ret = new $.Deferred();
-      var url = server.serviceUrl + '/' + p.resource + '/' + p.id;
+      var url = server.serviceUrl + '/' + p.resource + '/' + p.id + '?_format=json';
 
       $.ajax(client.authenticated({
         type: 'GET',
@@ -1328,11 +1328,13 @@ function Search(p) {
 
   search.execute = function() {
 
+    var queryParams = search.spec.queryParams();
+    queryParams["_format"] = "json";
 
     var searchParams = {
       type: 'GET',
       url: search.client.urlFor(search.spec),
-      data: search.spec.queryParams(),
+      data: queryParams,
       dataType: "json",
       traditional: true
     };
