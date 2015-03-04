@@ -415,77 +415,124 @@ function FhirClient(p) {
     return client;
 }
 
-// Patch jQuery AJAX mechanism to receive blob objects via XMLHttpRequest 2. Based on:
-//    https://gist.github.com/aaronk6/bff7cc600d863d31a7bf
-//    http://www.artandlogic.com/blog/2013/11/jquery-ajax-blobs-and-array-buffers/
-
-/**
- * Register ajax transports for blob send/recieve and array buffer send/receive via XMLHttpRequest Level 2
- * within the comfortable framework of the jquery ajax request, with full support for promises.
- *
- * Notice the +* in the dataType string? The + indicates we want this transport to be prepended to the list
- * of potential transports (so it gets first dibs if the request passes the conditions within to provide the
- * ajax transport, preventing the standard transport from hogging the request), and the * indicates that
- * potentially any request with any dataType might want to use the transports provided herein.
- *
- * Remember to specify 'processData:false' in the ajax options when attempting to send a blob or arraybuffer -
- * otherwise jquery will try (and fail) to convert the blob or buffer into a query string.
+/*!
+ * jQuery-ajaxTransport-XDomainRequest - v1.0.3 - 2014-06-06
+ * https://github.com/MoonScript/jQuery-ajaxTransport-XDomainRequest
+ * Copyright (c) 2014 Jason Moon (@JSONMOON)
+ * Licensed MIT (/blob/master/LICENSE.txt)
  */
-jQuery.ajaxTransport("+*", function(options, originalOptions, jqXHR){
-    // Test for the conditions that mean we can/want to send/receive blobs or arraybuffers - we need XMLHttpRequest
-    // level 2 (so feature-detect against window.FormData), feature detect against window.Blob or window.ArrayBuffer,
-    // and then check to see if the dataType is blob/arraybuffer or the data itself is a Blob/ArrayBuffer
-    if (window.FormData && ((options.dataType && (options.dataType === 'blob' || options.dataType === 'arraybuffer')) ||
-        (options.data && ((window.Blob && options.data instanceof Blob) ||
-            (window.ArrayBuffer && options.data instanceof ArrayBuffer)))
-        ))
-    {
-        return {
-            /**
-             * Return a transport capable of sending and/or receiving blobs - in this case, we instantiate
-             * a new XMLHttpRequest and use it to actually perform the request, and funnel the result back
-             * into the jquery complete callback (such as the success function, done blocks, etc.)
-             *
-             * @param headers
-             * @param completeCallback
-             */
-            send: function(headers, completeCallback){
-                var xhr = new XMLHttpRequest(),
-                    url = options.url || window.location.href,
-                    type = options.type || 'GET',
-                    dataType = options.dataType || 'text',
-                    data = options.data || null,
-                    async = options.async || true,
-                    key;
+(function(factory) {
+  // This only works if we force the patch directly on the jQuery object, so
+  // disable the other factory methods (NJS 2015-03-04)
+  /*
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as anonymous module.
+    define(['jquery'], factory);
+  } else if (typeof exports === 'object') {
+    // CommonJS
+    module.exports = factory(require('jquery'));
+  } else {
+    // Browser globals.
+    */
+    factory(jQuery);
+  //}
+}(function($) {
 
-                xhr.addEventListener('load', function(){
-                    var response = {}, status, isSuccess;
+// Only continue if we're on IE8/IE9 with jQuery 1.5+ (contains the ajaxTransport function)
+if ($.support.cors || !$.ajaxTransport || !window.XDomainRequest) {
+  return;
+}
 
-                    isSuccess = xhr.status >= 200 && xhr.status < 300 || xhr.status === 304;
+var httpRegEx = /^https?:\/\//i;
+var getOrPostRegEx = /^get|post$/i;
+var sameSchemeRegEx = new RegExp('^'+location.protocol, 'i');
 
-                    if (isSuccess) {
-                        response[dataType] = xhr.response;
-                    } else {
-                        // In case an error occured we assume that the response body contains
-                        // text data - so let's convert the binary data to a string which we can
-                        // pass to the complete callback.
-                        response.text = String.fromCharCode.apply(null, new Uint8Array(xhr.response));
-                    }
+// ajaxTransport exists in jQuery 1.5+
+$.ajaxTransport('* text html xml json', function(options, userOptions, jqXHR) {
+  
+  // Only continue if the request is: asynchronous, uses GET or POST method, has HTTP or HTTPS protocol, and has the same scheme as the calling page
+  if (!options.crossDomain || !options.async || !getOrPostRegEx.test(options.type) || !httpRegEx.test(options.url) || !sameSchemeRegEx.test(options.url)) {
+    return;
+  }
 
-                    completeCallback(xhr.status, xhr.statusText, response, xhr.getAllResponseHeaders());
-                });
+  var xdr = null;
 
-                xhr.open(type, url, async);
-                xhr.responseType = dataType;
+  return {
+    send: function(headers, complete) {
+      var postData = '';
+      var userType = (userOptions.dataType || '').toLowerCase();
 
-                for (key in headers) {
-                    if (headers.hasOwnProperty(key)) xhr.setRequestHeader(key, headers[key]);
-                }
-                xhr.send(data);
-            },
-            abort: function(){
-                jqXHR.abort();
-            }
+      xdr = new XDomainRequest();
+      if (/^\d+$/.test(userOptions.timeout)) {
+        xdr.timeout = userOptions.timeout;
+      }
+
+      xdr.ontimeout = function() {
+        complete(500, 'timeout');
+      };
+
+      xdr.onload = function() {
+        var allResponseHeaders = 'Content-Length: ' + xdr.responseText.length + '\r\nContent-Type: ' + xdr.contentType;
+        var status = {
+          code: 200,
+          message: 'success'
         };
+        var responses = {
+          text: xdr.responseText
+        };
+        try {
+          if (userType === 'html' || /text\/html/i.test(xdr.contentType)) {
+            responses.html = xdr.responseText;
+          } else if (userType === 'json' || (userType !== 'text' && /\/json/i.test(xdr.contentType))) {
+            try {
+              responses.json = $.parseJSON(xdr.responseText);
+            } catch(e) {
+              status.code = 500;
+              status.message = 'parseerror';
+              //throw 'Invalid JSON: ' + xdr.responseText;
+            }
+          } else if (userType === 'xml' || (userType !== 'text' && /\/xml/i.test(xdr.contentType))) {
+            var doc = new ActiveXObject('Microsoft.XMLDOM');
+            doc.async = false;
+            try {
+              doc.loadXML(xdr.responseText);
+            } catch(e) {
+              doc = undefined;
+            }
+            if (!doc || !doc.documentElement || doc.getElementsByTagName('parsererror').length) {
+              status.code = 500;
+              status.message = 'parseerror';
+              throw 'Invalid XML: ' + xdr.responseText;
+            }
+            responses.xml = doc;
+          }
+        } catch(parseMessage) {
+          throw parseMessage;
+        } finally {
+          complete(status.code, status.message, responses, allResponseHeaders);
+        }
+      };
+
+      // set an empty handler for 'onprogress' so requests don't get aborted
+      xdr.onprogress = function(){};
+      xdr.onerror = function() {
+        complete(500, 'error', {
+          text: xdr.responseText
+        });
+      };
+
+      if (userOptions.data) {
+        postData = ($.type(userOptions.data) === 'string') ? userOptions.data : $.param(userOptions.data);
+      }
+      xdr.open(options.type, options.url);
+      xdr.send(postData);
+    },
+    abort: function() {
+      if (xdr) {
+        xdr.abort();
+      }
     }
+  };
 });
+
+}));
