@@ -91,16 +91,62 @@ function completeCodeFlow(params){
   }).fail(function(){
     console.log("failed to exchange code for access_token", arguments);
     ret.reject();
-  });;
+  });
 
   return ret.promise();
 }
 
+function completeRefreshTokenExchange(){
+
+    var tokenResponse = getPreviousToken();
+
+    var params = {
+      code: tokenResponse.code,
+      state: tokenResponse.state
+    };
+  
+    var ret =  $.Deferred();
+    var state = JSON.parse(sessionStorage[params.state]);
+
+    $.ajax({
+
+      url: state.provider.oauth2.token_uri,
+      type: 'POST',
+      data: {
+        client_id: 'my_web_app',
+        grant_type: 'refresh_token',
+        refresh_token: tokenResponse.refresh_token,
+        state: tokenResponse.state
+      },
+    }).done(function(authz){
+      authz = $.extend(authz, params);
+      ret.resolve(authz);
+    }).fail(function(){
+      console.log("failed to exchange code for access_token", arguments);
+      ret.reject();
+    });
+
+    return ret.promise();
+}
+
 function completePageReload(){
   var d = $.Deferred();
-  process.nextTick(function(){
-    d.resolve(getPreviousToken());
-  });
+  var tokenResponse = getPreviousToken();
+  
+  if (tokenResponse !== undefined) {
+      if (tokenResponse.refresh_token !== undefined) {
+        $.when(completeRefreshTokenExchange()).then(function (tokenResponse) {
+            d.resolve(tokenResponse);
+        }, function () {
+            d.reject();
+        });
+      } else {
+        d.resolve(tokenResponse);
+      }
+  } else {
+      d.reject();
+  }
+
   return d;
 }
 
@@ -109,6 +155,7 @@ function readyArgs(){
   var input = null;
   var callback = function(){};
   var errback = function(){};
+  var client = null;
 
   if (arguments.length === 0){
     throw "Can't call 'ready' without arguments";
@@ -128,6 +175,11 @@ function readyArgs(){
     input = arguments[0];
     callback = arguments[1];
     errback = arguments[2];
+  } else if (arguments.length === 4){
+    input = arguments[0];
+    callback = arguments[1];
+    errback = arguments[2];
+    client = arguments[3];
   } else {
     throw "ready called with invalid arguments";
   }
@@ -135,34 +187,15 @@ function readyArgs(){
   return {
     input: input,
     callback: callback,
-    errback: errback
+    errback: errback,
+    client: client
   };
 }
 
-// Client settings
-BBClient.settings = {
-    replaceBrowserHistory: true
-};
-
-BBClient.ready = function(input, callback, errback){
-
-  var args = readyArgs.apply(this, arguments);
-
-  // decide between token flow (implicit grant) and code flow (authorization code grant)
-  var isCode = urlParam('code') || (args.input && args.input.code);
-
-  var accessTokenResolver = null;
-  if (sessionStorage.tokenResponse) { // we're reloading after successful completion
-    accessTokenResolver = completePageReload();
-  } else if (isCode) { // code flow
-    accessTokenResolver = completeCodeFlow(args.input);
-  } else { // token flow
-    accessTokenResolver = completeTokenFlow(args.input);
-  }
-  accessTokenResolver.done(function(tokenResponse){
+function processTokenResponse(tokenResponse, callback, errback){
 
     if (!tokenResponse || !tokenResponse.state) {
-      return args.errback("No 'state' parameter found in authorization response.");
+      return errback("No 'state' parameter found in authorization response.");
     }
     
     sessionStorage.tokenResponse = JSON.stringify(tokenResponse);
@@ -189,14 +222,38 @@ BBClient.ready = function(input, callback, errback){
         token: tokenResponse.access_token
       };
     } else if (!state.fake_token_response){
-      return args.errback("Failed to obtain access token.");
+      return errback("Failed to obtain access token.");
     }
 
-    var ret = FhirClient(fhirClientParams);
+    var ret = client || FhirClient(fhirClientParams);
+    //ret.init(fhirClientParams);
     ret.state = JSON.parse(JSON.stringify(state));
     ret.tokenResponse = JSON.parse(JSON.stringify(tokenResponse));
-    args.callback(ret);
+    callback(ret);
+}
 
+// Client settings
+BBClient.settings = {
+    replaceBrowserHistory: true
+};
+
+BBClient.ready = function(input, callback, errback, client){
+
+  var args = readyArgs.apply(this, arguments);
+
+  // decide between token flow (implicit grant) and code flow (authorization code grant)
+  var isCode = urlParam('code') || (args.input && args.input.code);
+
+  var accessTokenResolver = null;
+  if (sessionStorage.tokenResponse) { // we're reloading after successful completion
+    accessTokenResolver = completePageReload();
+  } else if (isCode) { // code flow
+    accessTokenResolver = completeCodeFlow(args.input);
+  } else { // token flow
+    accessTokenResolver = completeTokenFlow(args.input);
+  }
+  accessTokenResolver.done(function (tokenResponse) {
+    processTokenResponse(tokenResponse, args.callback, args.errback);
   }).fail(function(){
     args.errback("Failed to obtain access token.");
   });

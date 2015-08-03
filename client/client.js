@@ -37,6 +37,148 @@ function relative(id, server) {
   return params;
 }
 
+function getPreviousToken(){
+  var ret = sessionStorage.tokenResponse;
+  if (ret) ret = JSON.parse(ret);
+  return ret;
+}
+
+function completeRefreshTokenExchange(){
+
+    var tokenResponse = getPreviousToken();
+
+    var params = {
+      code: tokenResponse.code,
+      state: tokenResponse.state
+    };
+  
+    var ret =  $.Deferred();
+    var state = JSON.parse(sessionStorage[params.state]);
+
+    $.ajax({
+
+      url: state.provider.oauth2.token_uri,
+      type: 'POST',
+      data: {
+        client_id: 'my_web_app',
+        grant_type: 'refresh_token',
+        refresh_token: tokenResponse.refresh_token,
+        state: tokenResponse.state
+      },
+    }).done(function(authz){
+      authz = $.extend(authz, params);
+      ret.resolve(authz);
+    }).fail(function(){
+      console.log("failed to exchange code for access_token", arguments);
+      ret.reject();
+    });
+
+    return ret.promise();
+}
+
+function completePageReload(){
+  var d = $.Deferred();
+  var tokenResponse = getPreviousToken();
+  
+  if (tokenResponse !== undefined) {
+      if (tokenResponse.refresh_token !== undefined) {
+        $.when(completeRefreshTokenExchange()).then(function (tokenResponse) {
+            d.resolve(tokenResponse);
+        }, function () {
+            d.reject();
+        });
+      } else {
+        d.resolve(tokenResponse);
+      }
+  } else {
+      d.reject();
+  }
+
+  return d;
+}
+
+function readyArgs(){
+
+  var input = null;
+  var callback = function(){};
+  var errback = function(){};
+  var client = null;
+
+  if (arguments.length === 0){
+    throw "Can't call 'ready' without arguments";
+  } else if (arguments.length === 1){
+    callback = arguments[0];
+  } else if (arguments.length === 2){
+    if (typeof arguments[0] === 'function'){
+      callback = arguments[0];
+      errback = arguments[1];
+    } else if (typeof arguments[0] === 'object'){
+      input = arguments[0];
+      callback = arguments[1];
+    } else {
+      throw "ready called with invalid arguments";
+    }
+  } else if (arguments.length === 3){
+    input = arguments[0];
+    callback = arguments[1];
+    errback = arguments[2];
+  } else if (arguments.length === 4){
+    input = arguments[0];
+    callback = arguments[1];
+    errback = arguments[2];
+    client = arguments[3];
+  } else {
+    throw "ready called with invalid arguments";
+  }
+
+  return {
+    input: input,
+    callback: callback,
+    errback: errback,
+    client: client
+  };
+}
+
+function processTokenResponse(tokenResponse, callback, errback){
+
+    if (!tokenResponse || !tokenResponse.state) {
+      return errback("No 'state' parameter found in authorization response.");
+    }
+    
+    sessionStorage.tokenResponse = JSON.stringify(tokenResponse);
+
+    var state = JSON.parse(sessionStorage[tokenResponse.state]);
+    if (state.fake_token_response) {
+      tokenResponse = state.fake_token_response;
+    }
+
+    var fhirClientParams = {
+      serviceUrl: state.provider.url,
+      patientId: tokenResponse.patient
+    };
+    
+    if (tokenResponse.id_token) {
+        var id_token = tokenResponse.id_token;
+        var payload = jwt.decode(id_token);
+        fhirClientParams["userId"] = payload["profile"]; 
+    }
+
+    if (tokenResponse.access_token !== undefined) {
+      fhirClientParams.auth = {
+        type: 'bearer',
+        token: tokenResponse.access_token
+      };
+    } else if (!state.fake_token_response){
+      return errback("Failed to obtain access token.");
+    }
+
+    var ret = client || FhirClient(fhirClientParams);
+    ret.init(fhirClientParams);
+    ret.state = JSON.parse(JSON.stringify(state));
+    ret.tokenResponse = JSON.parse(JSON.stringify(tokenResponse));
+    callback(ret);
+}
+
 function ClientPrototype(){};
 var clientUtils = require('./utils');
 Object.keys(clientUtils).forEach(function(k){
@@ -54,13 +196,19 @@ function FhirClient(p) {
     var cache = {};
     var client = new ClientPrototype();
 
-    var server = client.server = {
-      serviceUrl: p.serviceUrl,
-      auth: p.auth
-    }
+    var server = {};
+    
+    client.init = function (p) {
+        server = client.server = {
+          serviceUrl: p.serviceUrl,
+          auth: p.auth
+        };
 
-    client.patientId = p.patientId;
-    client.userId = p.userId;
+        client.patientId = p.patientId;
+        client.userId = p.userId;
+    };
+    
+    client.init(p);
 
     client.cache = {
       get: function(p) {
@@ -229,7 +377,7 @@ function FhirClient(p) {
       return client.getBinary(getParams);
     };
 
-    client.get = function(p) {
+    client.get = function(p, finish) {
       // p.resource, p.id, ?p.version, p.include
 
       var ret = new $.Deferred();
@@ -248,7 +396,21 @@ function FhirClient(p) {
         ret.resolve(ids[0]);
       })
       .fail(function(){
-        ret.reject("Could not fetch " + url, arguments);
+        if (client.tokenResponse.refresh_token !== undefined && !finish) {
+          completePageReload().done(function (tokenResponse) {
+            processTokenResponse(tokenResponse, function(client){
+                $.when(client.get(p, true)).then(function(r){
+                    ret.resolve(r);
+                }, function (err) {
+                    ret.reject("Could not fetch " + url, arguments);
+                });
+            }, ret.reject, client);
+          }).fail(function(){
+            ret.reject("Could not fetch " + url, arguments);
+          });
+        } else {
+          ret.reject("Could not fetch " + url, arguments);
+        }
       });
       return ret;
     };
