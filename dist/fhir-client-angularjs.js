@@ -6412,8 +6412,8 @@ function completeCodeFlow(params){
 
   var headers = {};
 
-  if (state.client.secret) {
-    headers['Authorization'] = 'Basic ' + btoa(state.client.client_id + ':' + state.client.secret);
+  if (state.client.client_secret) {
+    headers['Authorization'] = 'Basic ' + btoa(state.client.client_id + ':' + state.client.client_secret);
   } else {
     data['client_id'] = state.client.client_id;
   }
