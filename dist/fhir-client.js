@@ -1002,6 +1002,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        "MedicationAdministration",
 	        "MedicationDispense",
 	        "MedicationOrder",
+            "MedicationRequest",
 	        "MedicationStatement",
 	        "NutritionOrder",
 	        "Observation",
@@ -1308,6 +1309,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ ])
 });
 ;
+
 },{}],2:[function(require,module,exports){
 
 },{}],3:[function(require,module,exports){
