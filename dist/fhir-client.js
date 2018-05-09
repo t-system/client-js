@@ -16934,14 +16934,14 @@ function stripTrailingSlash(str) {
 * based on fullSessionStorageSupport flag.
 * @return object JSON tokenResponse
 */
-function getPreviousToken(){
+function getPreviousToken(args){
   var token;
   
   if (BBClient.settings.fullSessionStorageSupport) {
     token = sessionStorage.tokenResponse;
     return JSON.parse(token);
   } else {
-    var state = urlParam('state');
+    var state = urlParam('state') || (args.input && args.input.state);
     return JSON.parse(sessionStorage[state]).tokenResponse;
   }
 }
@@ -17047,9 +17047,9 @@ function completeCodeFlow(params){
  * access token using the current refresh token.
  * @return promise object
  */
-function completeTokenRefreshFlow() {
+function completeTokenRefreshFlow(args) {
   var ret = Adapter.get().defer();
-  var tokenResponse = getPreviousToken();
+  var tokenResponse = getPreviousToken(args);
   var state = JSON.parse(sessionStorage[tokenResponse.state]);
   var refresh_token = tokenResponse.refresh_token;
 
@@ -17072,10 +17072,10 @@ function completeTokenRefreshFlow() {
   return ret.promise;
 }
 
-function completePageReload(){
+function completePageReload(args){
   var d = Adapter.get().defer();
   process.nextTick(function(){
-    d.resolve(getPreviousToken());
+    d.resolve(getPreviousToken(args));
   });
   return d;
 }
@@ -17141,7 +17141,7 @@ BBClient.settings = {
 * after the token was already obtain.
 * @return boolean
 */
-function validTokenResponse() {
+function validTokenResponse(args) {
   if (BBClient.settings.fullSessionStorageSupport && sessionStorage.tokenResponse) {
     return true;
   } else {
@@ -17153,9 +17153,9 @@ function validTokenResponse() {
   return false;
 }
 
-function isFakeOAuthToken(){
-  if (validTokenResponse()) {
-    var token = getPreviousToken();
+function isFakeOAuthToken(args){
+  if (validTokenResponse(args)) {
+    var token = getPreviousToken(args);
     if (token && token.state) {
       var state = JSON.parse(sessionStorage[token.state]);
       return state.fake_token_response;
@@ -17173,8 +17173,8 @@ BBClient.ready = function(input, callback, errback){
 
   var accessTokenResolver = null;
 
-  if (isFakeOAuthToken()) {
-    accessTokenResolver = completePageReload();
+  if (isFakeOAuthToken(args)) {
+    accessTokenResolver = completePageReload(args);
     // In order to remove the state query parameter in the URL, both replaceBrowserHistory
     // and fullSessionStorageSupport setting flags must be set to true. This allows querying the state
     // through sessionStorage. If the browser does not support the replaceState method for the History Web API,
@@ -17186,18 +17186,18 @@ BBClient.ready = function(input, callback, errback){
       window.history.replaceState({}, "", window.location.toString().replace(window.location.search, ""));
     }
   } else {
-    if (validTokenResponse()) { // we're reloading after successful completion
+    if (validTokenResponse(args)) { // we're reloading after successful completion
       // Check if 2 minutes from access token expiration timestamp
-      var tokenResponse = getPreviousToken();
+      var tokenResponse = getPreviousToken(args);
       var payloadCheck = jwt.decode(tokenResponse.access_token);
       var nearExpTime = Math.floor(Date.now() / 1000) >= (payloadCheck['exp'] - 120);
 
       if (tokenResponse.refresh_token
         && tokenResponse.scope.indexOf('online_access') > -1
         && nearExpTime) { // refresh token flow
-        accessTokenResolver = completeTokenRefreshFlow();
+        accessTokenResolver = completeTokenRefreshFlow(args);
       } else { // existing access token flow
-        accessTokenResolver = completePageReload();
+        accessTokenResolver = completePageReload(args);
       }
     } else if (isCode) { // code flow
       accessTokenResolver = completeCodeFlow(args.input);
