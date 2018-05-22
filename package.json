@@ -5,6 +5,7 @@
   "author": "Josh Mandel <joshua.mandel@childrens.harvard.edu>",
   "dependencies": {
     "btoa": "*",
+    "buffer": "^4.9.1",
     "jquery": "*",
     "jsonwebtoken": "^8.2.1"
   },
