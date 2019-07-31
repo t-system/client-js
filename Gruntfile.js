@@ -1,14 +1,12 @@
 module.exports = function (grunt) {
 
-  grunt.loadNpmTasks('grunt-contrib-clean');
-  grunt.loadNpmTasks('grunt-contrib-concat');
   grunt.loadNpmTasks('grunt-shell');
   grunt.loadNpmTasks('grunt-contrib-uglify');
 
   grunt.initConfig({
     shell: {
       browserify: {
-        command: "./node_modules/.bin/browserify  -e src/adapters/jquery.js -r buffer/:buffer -i 'jsdom' -g varify > dist/fhir-client-jquery.js; ./node_modules/.bin/browserify  -e src/adapters/angularjs.js -r buffer/:buffer -i 'jsdom' -g varify > dist/fhir-client-angularjs.js; ./node_modules/.bin/browserify  -e src/adapters/bundle.js -r buffer/:buffer -i 'jsdom' -g varify > dist/fhir-client.js",
+        command: "browserify -e src/adapters/jquery.js -r buffer/:buffer -i 'jsdom' -g [ babelify --presets [ @babel/preset-env ] ] > dist/fhir-client-jquery.js && browserify -e src/adapters/angularjs.js -r buffer/:buffer -i 'jsdom' -g [ babelify --presets [ @babel/preset-env ] ] > dist/fhir-client-angularjs.js && browserify -e src/adapters/bundle.js -r buffer/:buffer -i 'jsdom' -g [ babelify --presets [ @babel/preset-env ] ] > dist/fhir-client.js",
         options: {
           failOnError: true,
           stderr: true
