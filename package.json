@@ -5,24 +5,26 @@
   "author": "Josh Mandel <joshua.mandel@childrens.harvard.edu>",
   "dependencies": {
     "btoa": "*",
-    "buffer": "^4.9.1",
-    "jquery": "^3.4.1",
+    "buffer": "^4.9.2",
+    "jquery": "^3.5.0",
     "jsonwebtoken": "^8.2.1"
   },
   "scripts": {
-    "test": "mocha -c -R spec"
+      "test": "mocha -c -R spec",
+      "retire": "retire --path node_modules"
   },
   "devDependencies": {
-    "browserify": "^16.3.0",
-    "grunt": "^1.0.4",
+    "browserify": "^16.5.1",
+    "grunt": "^1.1.0",
     "grunt-contrib-clean": "^2.0.0",
     "grunt-contrib-concat": "^1.0.1",
     "grunt-contrib-uglify": "^4.0.1",
     "grunt-shell": "^3.0.1",
-    "jsdom": "^11.10.0",
-    "mocha": "*",
-    "should": "*",
-    "sinon": "*",
+    "jsdom": "^11.12.0",
+    "mocha": "^7.1.1",
+    "retire": "^2.2.0",
+    "should": "^13.2.3",
+    "sinon": "^9.0.2",
     "varify": "^0.1.1"
   },
   "engine": "node >= 0.6.0"
